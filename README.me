@@ -1,0 +1,170 @@
+# RSVP Reader
+
+Lector de velocidad basado en la técnica **Rapid Serial Visual Presentation (RSVP)**: muestra el texto palabra por palabra en un punto fijo de la pantalla, eliminando el movimiento ocular y permitiendo leer significativamente más rápido.
+
+Inspirado en el dispositivo de hardware open source [rsvpnano](https://github.com/ionutdecebal/rsvpnano). Este proyecto replica sus funciones como aplicación web de uso personal.
+
+---
+
+## Características
+
+- **Display RSVP con ORP** — cada palabra se muestra con la letra ancla (*Optimal Recognition Point*) resaltada, el punto donde el ojo enfoca naturalmente para reconocer la palabra
+- **Velocidad ajustable** — selector de 100 a 800 palabras por minuto
+- **Pacing dinámico** — palabras largas y con puntuación reciben automáticamente más tiempo de display
+- **Navegación** — avanzar/retroceder palabra a palabra o párrafo a párrafo
+- **Barra de progreso clickeable** — salta a cualquier punto del texto
+- **Palabras de contexto** — muestra la palabra anterior y siguiente para no perder el hilo
+- **Subida de archivos .txt** — drag & drop o selector de archivo
+- **Fallback sin servidor** — pega texto directamente en el navegador sin necesidad de Flask
+- **Atajos de teclado** — control completo sin ratón
+
+---
+
+## Estructura del proyecto
+
+```
+rsvp-reader/
+├── app.py              ← servidor Flask (API REST)
+├── txt_parser/
+│   ├── __init__.py
+│   └── txt.py          ← lectura, limpieza y tokenización de archivos .txt
+├── rsvp_reader.html    ← frontend completo (motor RSVP + UI)
+├── uploads/            ← archivos subidos (generados en runtime)
+├── cache/              ← tokens parseados en JSON (generados en runtime)
+└── README.md
+```
+
+---
+
+## Instalación
+
+**Requisitos:** Python 3.10+
+
+```bash
+# Clonar el repositorio
+git clone https://github.com/MiguelF-AI/RSVP_Reader.git
+cd RSVP_Reader
+
+# Instalar dependencias
+pip install flask flask-cors chardet
+```
+
+---
+
+## Uso
+
+### 1. Iniciar el servidor
+
+```bash
+python app.py
+```
+
+El servidor queda escuchando en `http://localhost:5000`.
+
+### 2. Abrir el frontend
+
+Abre el archivo `rsvp_reader.html` directamente en tu navegador (sin servidor web, como archivo local).
+
+### 3. Cargar un libro
+
+Arrastra un archivo `.txt` a la zona de carga o haz clic para seleccionarlo. El servidor lo procesa y devuelve los tokens al motor RSVP.
+
+> Si no quieres usar Flask, despliega el `<details>` al final de la página y pega el texto directamente — el tokenizado ocurre en el propio navegador.
+
+---
+
+## Atajos de teclado
+
+| Tecla | Acción |
+|-------|--------|
+| `Espacio` | Play / Pausa |
+| `←` | Palabra anterior |
+| `→` | Palabra siguiente |
+| `Ctrl + ←` | Párrafo anterior |
+| `Ctrl + →` | Párrafo siguiente |
+| `↑` | +10 WPM |
+| `↓` | −10 WPM |
+
+---
+
+## API
+
+El servidor expone dos endpoints:
+
+### `POST /upload`
+
+Sube un archivo `.txt`. Devuelve metadatos y un `book_id`.
+
+```bash
+curl -X POST http://localhost:5000/upload \
+  -F "file=@mi_libro.txt"
+```
+
+```json
+{
+  "book_id": "fe4ea51a00e11541",
+  "title": "mi_libro",
+  "word_count": 4821,
+  "para_count": 34
+}
+```
+
+### `GET /book/<book_id>`
+
+Devuelve el array completo de tokens para un libro previamente subido.
+
+```bash
+curl http://localhost:5000/book/fe4ea51a00e11541
+```
+
+```json
+{
+  "title": "mi_libro",
+  "word_count": 4821,
+  "para_count": 34,
+  "tokens": [
+    {
+      "text": "La",
+      "para": 0,
+      "orp": 0,
+      "end_punct": false,
+      "is_long": false,
+      "is_very_long": false
+    }
+  ]
+}
+```
+
+---
+
+## Cómo funciona el ORP
+
+La posición de la letra ancla se calcula según la longitud de la palabra:
+
+| Longitud | Posición ancla |
+|----------|---------------|
+| 1–3 letras | 1ª letra |
+| 4–5 letras | 2ª letra |
+| 6–8 letras | 3ª letra |
+| 9–11 letras | 4ª letra |
+| 12–14 letras | 5ª letra |
+| 15+ letras | ~28% de la longitud |
+
+La misma función está implementada en Python (`txt_parser/txt.py`) y en JavaScript (`rsvp_reader.html`) para garantizar consistencia entre el caché del servidor y el render del frontend.
+
+---
+
+## Roadmap
+
+- [ ] Soporte para archivos **EPUB** (con navegación por capítulos)
+- [ ] Soporte para archivos **PDF**
+- [ ] Persistencia de progreso por libro (SQLite)
+- [ ] Librería de libros subidos
+- [ ] Modo oscuro / claro
+
+---
+
+## Créditos
+
+- [rsvpnano](https://github.com/ionutdecebal/rsvpnano) — dispositivo de hardware que inspiró este proyecto
+- Técnica ORP basada en investigación de [Spritz Technology](https://spritzinc.com)
