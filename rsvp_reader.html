@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSVP Reader</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0f;
+    --surface: #16161a;
+    --surface2: #1e1e24;
+    --border: #2a2a32;
+    --text: #e8e8f0;
+    --muted: #5a5a6e;
+    --accent: #e8503a;
+    --accent-dim: rgba(232, 80, 58, 0.15);
+    --word-size: 3.8rem;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 2rem 1rem;
+    user-select: none;
+  }
+
+  /* ── HEADER ── */
+  header {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .logo span { color: var(--accent); }
+  .progress-info {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  /* ── DISPLAY PRINCIPAL ── */
+  .display-wrap {
+    width: 100%;
+    max-width: 720px;
+    position: relative;
+  }
+
+  /* Guías ORP */
+  .orp-guides {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: stretch;
+    z-index: 1;
+  }
+  .guide-left {
+    flex: 1;
+    border-right: 1px solid var(--border);
+  }
+  .guide-right {
+    flex: 2;
+  }
+
+  .display {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    height: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    z-index: 2;
+  }
+
+  /* Línea central de foco */
+  .focus-line {
+    position: absolute;
+    left: 0; right: 0;
+    top: 50%;
+    height: 1px;
+    background: var(--border);
+    transform: translateY(-30px);
+    opacity: 0.5;
+  }
+
+  /* Zona de contexto (palabra anterior / siguiente) */
+  .context-word {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--muted);
+    height: 1.4rem;
+    display: flex;
+    align-items: center;
+    letter-spacing: 0.03em;
+    transition: opacity 0.1s;
+    min-height: 22px;
+  }
+
+  /* Palabra principal */
+  .word-display {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: var(--word-size);
+    font-weight: 300;
+    line-height: 1;
+    margin: 0.3rem 0;
+    letter-spacing: -0.01em;
+    min-height: 4.5rem;
+  }
+
+  .word-before { color: var(--text); opacity: 0.85; }
+  .word-anchor {
+    color: var(--accent);
+    position: relative;
+  }
+  /* Subrayado sutil bajo la letra ancla */
+  .word-anchor::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    opacity: 0.4;
+    border-radius: 1px;
+  }
+  .word-after { color: var(--text); opacity: 0.85; }
+
+
+
+  /* Estado paused / idle */
+  .display.paused .word-display { opacity: 0.4; }
+  .display.idle .word-display {
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  /* Indicador de pausa */
+  .pause-badge {
+    position: absolute;
+    top: 12px; right: 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .display.paused .pause-badge { opacity: 1; }
+
+  /* ── BARRA DE PROGRESO ── */
+  .progress-bar-wrap {
+    width: 100%;
+    max-width: 720px;
+    margin-top: 1rem;
+    cursor: pointer;
+  }
+  .progress-bar-track {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.1s linear;
+    width: 0%;
+  }
+  .progress-bar-wrap:hover .progress-bar-track { height: 5px; }
+
+  /* ── CONTROLES ── */
+  .controls {
+    width: 100%;
+    max-width: 720px;
+    margin-top: 1.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+
+  /* Fila principal de botones */
+  .btn-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 1rem;
+    height: 36px;
+  }
+  .btn:hover { background: var(--surface2); border-color: var(--muted); }
+  .btn:active { transform: scale(0.97); }
+
+  .btn-icon { padding: 0; width: 36px; }
+
+  .btn-play {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    font-size: 1.1rem;
+  }
+  .btn-play:hover { background: var(--accent); color: #fff; }
+
+  /* Controles de salto */
+  .jump-label {
+    font-size: 0.6rem;
+    color: var(--muted);
+    display: block;
+    margin-top: 1px;
+    letter-spacing: 0.08em;
+  }
+
+  /* Fila de settings */
+  .settings-row {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .setting-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .setting-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .setting-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--text);
+    min-width: 42px;
+    text-align: right;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    width: 120px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+  }
+
+  /* Checkbox toggle */
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .toggle-wrap input { display: none; }
+  .toggle-track {
+    width: 28px; height: 16px;
+    background: var(--border);
+    border-radius: 8px;
+    position: relative;
+    transition: background 0.2s;
+  }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--muted);
+    top: 3px; left: 3px;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .toggle-wrap input:checked + .toggle-track { background: var(--accent-dim); }
+  .toggle-wrap input:checked + .toggle-track::after {
+    transform: translateX(12px);
+    background: var(--accent);
+  }
+
+  /* ── TEXTO DE ENTRADA ── */
+  .text-section {
+    width: 100%;
+    max-width: 720px;
+    margin-top: 2.5rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+  }
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.6rem;
+  }
+  textarea {
+    width: 100%;
+    height: 110px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    padding: 0.8rem 1rem;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  textarea:focus { border-color: var(--muted); }
+
+  .load-btn {
+    margin-top: 0.6rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.5rem 1.2rem;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .load-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── UPLOADER ── */
+  .drop-zone {
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .drop-icon {
+    font-size: 1.4rem;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+  .drop-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text);
+    margin-bottom: 0.25rem;
+  }
+  .drop-sub {
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .drop-zone.loading .drop-title { color: var(--accent); }
+
+  .book-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.9rem 1rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+  .book-info { display: flex; flex-direction: column; gap: 3px; }
+  .book-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem;
+    color: var(--text);
+  }
+  .book-meta {
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .upload-error {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: #e8503a;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.8rem;
+    border: 1px solid rgba(232,80,58,0.3);
+    border-radius: 3px;
+    background: rgba(232,80,58,0.08);
+  }
+
+  .paste-details {
+    margin-top: 1rem;
+  }
+  .paste-details summary {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    list-style: none;
+  }
+  .paste-details summary::-webkit-details-marker { display: none; }
+  .paste-details summary::before { content: '+ '; }
+  .paste-details[open] summary::before { content: '− '; }
+  .paste-details textarea {
+    margin-top: 0.6rem;
+    height: 100px;
+  }
+
+  /* ── ATAJOS ── */
+  .shortcuts {
+    width: 100%;
+    max-width: 720px;
+    margin-top: 2rem;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .shortcut {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  kbd {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-size: 0.65rem;
+    color: var(--text);
+    font-family: inherit;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span>RSVP</span> reader</div>
+  <div class="progress-info" id="progress-info">0 / 0 palabras</div>
+</header>
+
+<!-- DISPLAY -->
+<div class="display-wrap">
+  <div class="orp-guides">
+    <div class="guide-left"></div>
+    <div class="guide-right"></div>
+  </div>
+  <div class="display idle" id="display">
+    <div class="focus-line"></div>
+    <div class="pause-badge">PAUSA</div>
+    <div class="context-word" id="ctx-prev"></div>
+    <div class="word-display" id="word-el">
+      <span class="word-before"></span>
+      <span class="word-anchor">LISTO</span>
+      <span class="word-after"></span>
+    </div>
+    <div class="context-word" id="ctx-next"></div>
+  </div>
+</div>
+
+<!-- BARRA PROGRESO -->
+<div class="progress-bar-wrap" id="progress-bar-wrap">
+  <div class="progress-bar-track">
+    <div class="progress-bar-fill" id="progress-fill"></div>
+  </div>
+</div>
+
+<!-- CONTROLES -->
+<div class="controls">
+  <div class="btn-row">
+    <button class="btn btn-icon" id="btn-prev-para" title="Párrafo anterior">⇤</button>
+    <button class="btn btn-icon" id="btn-prev-word" title="Palabra anterior">←</button>
+    <button class="btn btn-play" id="btn-play" title="Play/Pausa">▶</button>
+    <button class="btn btn-icon" id="btn-next-word" title="Siguiente palabra">→</button>
+    <button class="btn btn-icon" id="btn-next-para" title="Párrafo siguiente">⇥</button>
+  </div>
+
+  <div class="settings-row">
+    <!-- WPM -->
+    <div class="setting-group">
+      <span class="setting-label">WPM</span>
+      <input type="range" id="wpm-slider" min="100" max="800" step="10" value="250">
+      <span class="setting-value" id="wpm-val">250</span>
+    </div>
+    <!-- Tamaño de fuente -->
+    <div class="setting-group">
+      <span class="setting-label">Tamaño</span>
+      <input type="range" id="size-slider" min="2" max="6" step="0.2" value="3.8">
+      <span class="setting-value" id="size-val">M</span>
+    </div>
+    <!-- Contexto -->
+    <label class="toggle-wrap" title="Mostrar palabras de contexto">
+      <input type="checkbox" id="ctx-toggle" checked>
+      <div class="toggle-track"></div>
+      <span class="setting-label">Contexto</span>
+    </label>
+    <!-- Pacing dinámico -->
+    <label class="toggle-wrap" title="Más tiempo en palabras largas y puntuación">
+      <input type="checkbox" id="pacing-toggle" checked>
+      <div class="toggle-track"></div>
+      <span class="setting-label">Pacing</span>
+    </label>
+  </div>
+</div>
+
+<!-- CARGA DE ARCHIVO -->
+<div class="text-section">
+  <div class="section-label">Archivo</div>
+
+  <div class="drop-zone" id="drop-zone">
+    <div class="drop-icon">↑</div>
+    <div class="drop-title">Arrastra un archivo .txt aquí</div>
+    <div class="drop-sub">o haz clic para seleccionar</div>
+    <input type="file" id="file-input" accept=".txt" style="display:none">
+  </div>
+
+  <div class="book-status" id="book-status" style="display:none">
+    <div class="book-info">
+      <span class="book-title" id="book-title"></span>
+      <span class="book-meta" id="book-meta"></span>
+    </div>
+    <button class="load-btn" id="btn-change">Cambiar archivo</button>
+  </div>
+
+  <div class="upload-error" id="upload-error" style="display:none"></div>
+
+  <details class="paste-details">
+    <summary>O pega texto directamente (sin servidor)</summary>
+    <textarea id="text-input" placeholder="Pega texto aquí..."></textarea>
+    <button class="load-btn" id="btn-load">Cargar texto →</button>
+  </details>
+</div>
+
+<!-- ATAJOS -->
+<div class="shortcuts">
+  <div class="shortcut"><kbd>Espacio</kbd> play/pausa</div>
+  <div class="shortcut"><kbd>←</kbd> palabra anterior</div>
+  <div class="shortcut"><kbd>→</kbd> palabra siguiente</div>
+  <div class="shortcut"><kbd>↑</kbd> +10 WPM</div>
+  <div class="shortcut"><kbd>↓</kbd> −10 WPM</div>
+  <div class="shortcut"><kbd>Ctrl ←</kbd> párrafo anterior</div>
+  <div class="shortcut"><kbd>Ctrl →</kbd> párrafo siguiente</div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   MOTOR RSVP — fase 1 y 2
+   ═══════════════════════════════════════════════ */
+
+/* ── 1. ESTADO GLOBAL ── */
+const state = {
+  words: [],          // array de {text, paraIndex, isEndPunct, isLong}
+  index: 0,
+  playing: false,
+  wpm: 250,
+  timer: null,
+};
+
+/* ── 2. CÁLCULO ORP ──
+   Posición de la letra ancla según longitud de palabra.
+   Basado en investigación de Spritz y rsvpnano.
+   Palabras cortas → más cerca del inicio.
+   Palabras largas → avanza pero no llega al centro. */
+function orpIndex(word) {
+  const len = word.length;
+  if (len <= 1)  return 0;
+  if (len <= 3)  return 0;
+  if (len <= 5)  return 1;
+  if (len <= 8)  return 2;
+  if (len <= 11) return 3;
+  if (len <= 14) return 4;
+  return Math.floor(len * 0.28); // ~28% para palabras muy largas
+}
+
+/* ── 3. TOKENIZADOR ──
+   Divide texto en palabras y marca metadatos útiles */
+function tokenize(text) {
+  const endPunctRe = /[.!?…;:,\-–—]$/;
+  const paragraphs = text.split(/\n\s*\n+/).filter(p => p.trim());
+  const words = [];
+  paragraphs.forEach((para, paraIdx) => {
+    const raw = para.trim().split(/\s+/).filter(Boolean);
+    raw.forEach(w => {
+      words.push({
+        text: w,
+        paraIndex: paraIdx,
+        isEndPunct: endPunctRe.test(w),
+        isLong: w.length > 8,
+        isVeryLong: w.length > 13,
+      });
+    });
+  });
+  return words;
+}
+
+/* ── 4. DELAY DINÁMICO (pacing) ──
+   Palabras con puntuación o muy largas reciben más tiempo.
+   Esto imita el comportamiento del firmware rsvpnano. */
+function getDelay(word, wpm, dynamicPacing) {
+  const base = 60000 / wpm;
+  if (!dynamicPacing) return base;
+  let factor = 1.0;
+  if (word.isEndPunct)  factor *= 1.8;  // puntuación final: pausa larga
+  if (word.isLong)      factor *= 1.2;  // palabra larga
+  if (word.isVeryLong)  factor *= 1.15; // extra para muy largas
+  return Math.round(base * factor);
+}
+
+/* ── 5. RENDER DE PALABRA CON ORP ── */
+function renderWord(wordObj) {
+  const word  = wordObj ? wordObj.text : '';
+  const pivot = wordObj ? orpIndex(word) : 0;
+  const before  = word.slice(0, pivot);
+  const anchor  = word.slice(pivot, pivot + 1);
+  const after   = word.slice(pivot + 1);
+
+  const el = document.getElementById('word-el');
+  el.querySelector('.word-before').textContent  = before;
+  el.querySelector('.word-anchor').textContent  = anchor;
+  el.querySelector('.word-after').textContent   = after;
+
+
+}
+
+/* ── 6. ACTUALIZAR UI ── */
+function updateUI() {
+  const w = state.words[state.index] || null;
+  const display = document.getElementById('display');
+  const showCtx = document.getElementById('ctx-toggle').checked;
+
+  renderWord(w);
+
+  // Contexto
+  const prev = showCtx && state.index > 0 ? state.words[state.index - 1].text : '';
+  const next = showCtx && state.index < state.words.length - 1 ? state.words[state.index + 1].text : '';
+  document.getElementById('ctx-prev').textContent = prev;
+  document.getElementById('ctx-next').textContent = next;
+
+  // Progreso
+  const total = state.words.length;
+  const pct   = total ? ((state.index + 1) / total * 100) : 0;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-info').textContent =
+    total ? `${state.index + 1} / ${total} palabras` : '0 / 0 palabras';
+
+  // Clases display
+  display.classList.toggle('paused', !state.playing && total > 0);
+  display.classList.toggle('idle',    total === 0);
+}
+
+/* ── 7. REPRODUCCIÓN ── */
+function scheduleNext() {
+  if (!state.playing || state.index >= state.words.length) {
+    if (state.index >= state.words.length && state.words.length > 0) {
+      // Llegamos al final
+      state.playing = false;
+      state.index = 0;
+      updateUI();
+      document.getElementById('btn-play').textContent = '▶';
+    }
+    return;
+  }
+  const word    = state.words[state.index];
+  const pacing  = document.getElementById('pacing-toggle').checked;
+  const delay   = getDelay(word, state.wpm, pacing);
+
+  state.timer = setTimeout(() => {
+    state.index++;
+    if (state.index < state.words.length) {
+      updateUI();
+      scheduleNext();
+    } else {
+      state.playing = false;
+      state.index = state.words.length - 1;
+      updateUI();
+      document.getElementById('btn-play').textContent = '▶';
+    }
+  }, delay);
+}
+
+function play() {
+  if (!state.words.length) return;
+  if (state.index >= state.words.length) state.index = 0;
+  state.playing = true;
+  document.getElementById('btn-play').textContent = '⏸';
+  updateUI();
+  scheduleNext();
+}
+
+function pause() {
+  state.playing = false;
+  clearTimeout(state.timer);
+  document.getElementById('btn-play').textContent = '▶';
+  updateUI();
+}
+
+function togglePlay() {
+  state.playing ? pause() : play();
+}
+
+/* ── 8. NAVEGACIÓN ── */
+function goWord(delta) {
+  pause();
+  state.index = Math.max(0, Math.min(state.words.length - 1, state.index + delta));
+  updateUI();
+}
+
+function goParagraph(delta) {
+  pause();
+  if (!state.words.length) return;
+  const curPara = state.words[state.index].paraIndex;
+  const targetPara = curPara + delta;
+  // Buscar primera palabra del párrafo destino
+  const idx = delta > 0
+    ? state.words.findIndex((w, i) => i > state.index && w.paraIndex === targetPara)
+    : state.words.findLastIndex((w, i) => i < state.index && w.paraIndex === targetPara);
+  if (idx !== -1) {
+    state.index = idx;
+  } else if (delta < 0) {
+    // Si no hay párrafo anterior, ir al inicio del actual
+    const firstOfCurrent = state.words.findIndex(w => w.paraIndex === curPara);
+    state.index = firstOfCurrent;
+  }
+  updateUI();
+}
+
+/* ── 9. INTEGRACIÓN CON API FLASK ── */
+const API = 'http://localhost:5000';
+
+function setDropState(state) {
+  const dz = document.getElementById('drop-zone');
+  const ti = dz.querySelector('.drop-title');
+  if (state === 'loading') {
+    dz.classList.add('loading');
+    ti.textContent = 'Procesando...';
+  } else {
+    dz.classList.remove('loading');
+    ti.textContent = 'Arrastra un archivo .txt aquí';
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('upload-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+function showBookStatus(title, wordCount, paraCount) {
+  document.getElementById('drop-zone').style.display = 'none';
+  const bs = document.getElementById('book-status');
+  bs.style.display = 'flex';
+  document.getElementById('book-title').textContent = title;
+  document.getElementById('book-meta').textContent =
+    `${wordCount.toLocaleString()} palabras · ${paraCount} párrafos`;
+}
+
+function resetDropZone() {
+  document.getElementById('drop-zone').style.display = 'block';
+  document.getElementById('book-status').style.display = 'none';
+}
+
+// Convierte tokens de la API al formato interno del motor
+function tokensFromAPI(apiTokens) {
+  return apiTokens.map(t => ({
+    text:       t.text,
+    paraIndex:  t.para,
+    isEndPunct: t.end_punct,
+    isLong:     t.is_long,
+    isVeryLong: t.is_very_long,
+  }));
+}
+
+async function uploadFile(file) {
+  if (!file.name.endsWith('.txt')) {
+    showError('Solo se aceptan archivos .txt por ahora.');
+    return;
+  }
+
+  setDropState('loading');
+  document.getElementById('upload-error').style.display = 'none';
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    const res = await fetch(`${API}/upload`, { method: 'POST', body: form });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || `Error ${res.status}`);
+    }
+    const meta = await res.json();
+
+    // Obtener tokens
+    const res2 = await fetch(`${API}/book/${meta.book_id}`);
+    if (!res2.ok) throw new Error('No se pudieron obtener los tokens del libro.');
+    const data = await res2.json();
+
+    // Cargar en el motor
+    pause();
+    state.words = tokensFromAPI(data.tokens);
+    state.index = 0;
+    updateUI();
+
+    showBookStatus(meta.title, meta.word_count, meta.para_count);
+
+  } catch (e) {
+    showError(e.message.includes('fetch') || e.message.includes('Failed')
+      ? 'No se pudo conectar con el servidor. ¿Está corriendo app.py?'
+      : e.message);
+  } finally {
+    setDropState('idle');
+  }
+}
+
+/* ── 10. CARGAR TEXTO (fallback sin servidor) ── */
+function loadText() {
+  const raw = document.getElementById('text-input').value.trim();
+  if (!raw) return;
+  pause();
+  state.words = tokenize(raw);
+  state.index = 0;
+  updateUI();
+}
+
+/* ── 11. EVENTOS ── */
+document.getElementById('btn-play').addEventListener('click', togglePlay);
+document.getElementById('btn-prev-word').addEventListener('click', () => goWord(-1));
+document.getElementById('btn-next-word').addEventListener('click', () => goWord(1));
+document.getElementById('btn-prev-para').addEventListener('click', () => goParagraph(-1));
+document.getElementById('btn-next-para').addEventListener('click', () => goParagraph(1));
+document.getElementById('btn-load').addEventListener('click', loadText);
+document.getElementById('btn-change').addEventListener('click', () => {
+  pause();
+  resetDropZone();
+  state.words = [];
+  state.index = 0;
+  updateUI();
+});
+
+// Drop zone — clic
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) uploadFile(fileInput.files[0]);
+});
+
+// Drop zone — drag & drop
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadFile(file);
+});
+
+// WPM slider
+document.getElementById('wpm-slider').addEventListener('input', function() {
+  state.wpm = parseInt(this.value);
+  document.getElementById('wpm-val').textContent = state.wpm;
+});
+
+// Tamaño de fuente
+const sizeLabels = { 2:'XS', 3:'S', 3.8:'M', 4.6:'L', 5.4:'XL', 6:'XXL' };
+document.getElementById('size-slider').addEventListener('input', function() {
+  const v = parseFloat(this.value);
+  document.documentElement.style.setProperty('--word-size', v + 'rem');
+  const label = Object.entries(sizeLabels).reduce((prev, [k]) =>
+    Math.abs(k - v) < Math.abs(prev - v) ? parseFloat(k) : prev,
+    parseFloat(Object.keys(sizeLabels)[2])
+  );
+  document.getElementById('size-val').textContent = sizeLabels[label] || 'M';
+});
+
+// Click en barra de progreso para saltar posición
+document.getElementById('progress-bar-wrap').addEventListener('click', function(e) {
+  if (!state.words.length) return;
+  const rect = this.getBoundingClientRect();
+  const pct  = (e.clientX - rect.left) / rect.width;
+  pause();
+  state.index = Math.floor(pct * state.words.length);
+  state.index = Math.max(0, Math.min(state.words.length - 1, state.index));
+  updateUI();
+});
+
+// Toggle contexto
+document.getElementById('ctx-toggle').addEventListener('change', updateUI);
+
+// Atajos de teclado
+document.addEventListener('keydown', e => {
+  // Ignorar si el foco está en el textarea
+  if (document.activeElement.tagName === 'TEXTAREA') return;
+
+  switch(e.key) {
+    case ' ':
+      e.preventDefault();
+      togglePlay();
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      e.ctrlKey || e.metaKey ? goParagraph(-1) : goWord(-1);
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      e.ctrlKey || e.metaKey ? goParagraph(1) : goWord(1);
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      state.wpm = Math.min(800, state.wpm + 10);
+      document.getElementById('wpm-slider').value = state.wpm;
+      document.getElementById('wpm-val').textContent = state.wpm;
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      state.wpm = Math.max(100, state.wpm - 10);
+      document.getElementById('wpm-slider').value = state.wpm;
+      document.getElementById('wpm-val').textContent = state.wpm;
+      break;
+  }
+});
+
+updateUI();
+</script>
+</body>
+</html>
